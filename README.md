@@ -9,6 +9,7 @@ We use a step-by-step incremental build-up to gain trust in the benchmark:
 1. **Physics Baseline (`01_physics_baseline.py`)**: Uses only two highly interpretable features (e.g., dominant frequency and RMS energy).
 2. **Expanded Features (`02_expanded_features.py`)**: Explores 13 physics-based and statistical features.
 3. **Complex Embeddings (`03_complex_embeddings.py`)**: Uses YAMNet embeddings from TensorFlow Hub to show SOTA feature representations.
+4. **Supervised Learning (`04_supervised_learning.py`)**: Demonstrates if the data is inherently learnable across the three different feature representation levels using a Random Forest classifier.
 
 ## Algorithms
 We benchmark the following unsupervised algorithms:
@@ -25,3 +26,4 @@ We evaluate the performance using three distinct metrics:
 1. Run `python 00_generate_dummy_data.py` to create synthetic test audio files.
 2. Run `python 01_physics_baseline.py`, followed by `02` and `03` to observe the benchmarking progression.
 3. Open the generated HTML reports (e.g., `report_01_physics_baseline.html`) to back-track and listen to the grouped clusters!
+4. Run `python 04_supervised_learning.py` to see supervised upper bounds for the extracted features.
