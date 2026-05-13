@@ -1,0 +1,7 @@
+librosa
+scikit-learn
+soundfile
+numpy
+tensorflow
+tensorflow_hub
+scipy
