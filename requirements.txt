@@ -5,3 +5,4 @@ numpy
 tensorflow
 tensorflow_hub
 scipy
+pyyaml
