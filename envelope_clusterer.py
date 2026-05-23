@@ -15,7 +15,7 @@ class ImprovedRuleEnvelopeClusterer:
     """
     EPS = 1e-6
 
-    def __init__(self, config_path="ClusteringConfig.yaml", adaptive_proximity=True, adaptive_multiplier=0.5):
+    def __init__(self, config_path="ClusteringConfig.yaml", adaptive_proximity=True, adaptive_multiplier=2.0):
         with open(config_path) as f:
             cfg = yaml.safe_load(f)
 
@@ -293,10 +293,87 @@ class ImprovedRuleEnvelopeClusterer:
         # Implementation for forgetting if enabled
         pass
 
-    # -- Basic Logging implementations --
-    def track_file(self, cluster_id, file): pass
-    def log_cluster(self, idx): pass
-    def save_state(self): pass
-    def log_merge_event(self, id_a, id_b): pass
-    def _log_removal_event(self, removed_id): pass
-    def track_data(self, cluster_id, audio_data, sample_rate): pass
+    # ----------------------------------------------------
+    # Logging utilities (restored original methods)
+    # ----------------------------------------------------
+    def track_file(self, cluster_id, file):
+        d = os.path.join(self.track_dir, f"cluster_{cluster_id}")
+        os.makedirs(d, exist_ok=True)
+        existing = os.listdir(d)
+        if len(existing) >= self.keep:
+            return
+        dst = os.path.join(d, os.path.basename(file))
+        if not os.path.exists(dst):
+            shutil.copy2(file, dst)
+
+    def log_cluster(self, idx):
+        if self.log_rows == 0:
+            self.log_file_idx += 1
+            self.current_log = os.path.join(self.log_dir, f"rule_updates_{self.log_file_idx:03d}.csv")
+            with open(self.current_log, "w", newline="") as f:
+                writer = csv.writer(f)
+                writer.writerow(["time", "cluster", "rules"])
+
+        with open(self.current_log, "a", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow([datetime.now(), self.cluster_ids[idx], str(self.clusters[idx])])
+
+        self.log_rows += 1
+        if self.log_rows >= self.max_rows:
+            self.log_rows = 0
+
+    def save_state(self):
+        state = os.path.join(self.log_dir, "cluster_state.csv")
+        with open(state, "w", newline="") as f:
+            writer = csv.writer(f)
+            header = ["cluster", "count"]
+            if len(self.clusters) > 0:
+                feats = list(self.clusters[0].keys())
+                for x in feats:
+                    header.extend([x+"_min", x+"_max"])
+            writer.writerow(header)
+
+            if len(self.clusters) > 0:
+                for i, c in enumerate(self.clusters):
+                    row = [self.cluster_ids[i], self.cluster_counts[i]]
+                    for feat in feats:
+                        row.extend(c[feat])
+                    writer.writerow(row)
+
+    def log_merge_event(self, id_a, id_b):
+        path = os.path.join(self.log_dir, "merge_events.csv")
+        exists = os.path.exists(path)
+        with open(path, "a", newline="") as f:
+            w = csv.writer(f)
+            if not exists:
+                w.writerow(["time", "kept", "removed"])
+            w.writerow([datetime.now(), id_a, id_b])
+
+    def _log_removal_event(self, removed_id):
+        path = os.path.join(self.log_dir, "cluster_removals.csv")
+        exists = os.path.exists(path)
+        with open(path, "a", newline="") as f:
+            w = csv.writer(f)
+            if not exists:
+                w.writerow(["time", "removed_cluster_id"])
+            w.writerow([datetime.now(), removed_id])
+
+    def track_data(self, cluster_id, audio_data, sample_rate):
+        cluster_dir = os.path.join(self.track_dir, f"cluster_{cluster_id}")
+        os.makedirs(cluster_dir, exist_ok=True)
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        filename = f"{timestamp}.wav"
+        filepath = os.path.join(cluster_dir, filename)
+
+        if audio_data.dtype != np.int16:
+            if np.issubdtype(audio_data.dtype, np.floating):
+                audio_data = (audio_data * 32767).astype(np.int16)
+            else:
+                audio_data = audio_data.astype(np.int16)
+
+        with wave.open(filepath, 'wb') as wav_file:
+            wav_file.setnchannels(1 if audio_data.ndim == 1 else audio_data.shape[1])
+            wav_file.setsampwidth(2)
+            wav_file.setframerate(sample_rate)
+            wav_file.writeframes(audio_data.tobytes())
+        print(f"Written: {filepath}")

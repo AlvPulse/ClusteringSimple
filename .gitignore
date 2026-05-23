@@ -3,3 +3,5 @@ dummy_audio/
 report_*.html
 
 __pycache__/
+logs/
+tracked_samples/
