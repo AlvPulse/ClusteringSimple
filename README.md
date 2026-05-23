@@ -11,10 +11,13 @@ We use a step-by-step incremental build-up to gain trust in the benchmark:
 3. **Complex Embeddings (`03_complex_embeddings.py`)**: Uses YAMNet embeddings from TensorFlow Hub to show SOTA feature representations.
 4. **Supervised Learning (`04_supervised_learning.py`)**: Demonstrates if the data is inherently learnable across the three different feature representation levels using a Random Forest classifier.
 5. **Rule Envelope Clustering (`05_rule_envelope.py`)**: Demonstrates an envelope (hyperbox) based streaming algorithm, improved with adaptive proximity (using Welford's running standard deviation) and 1D average overlap checks to overcome the curse of dimensionality.
+6. **Benchmark All Algorithms (`06_benchmark_all.py`)**: Evaluates and compares all custom algorithms alongside standard scikit-learn models (DBSCAN, Birch, MiniBatchKMeans, KMeans). Outputs a formatted summary table.
 
 ## Algorithms
 We benchmark the following unsupervised algorithms:
-- **K-Means**: The traditional batch-mode SOTA baseline.
+- **K-Means / MiniBatchKMeans**: Centroid-based batch and streaming SOTA baselines.
+- **DBSCAN**: Density-based spatial clustering.
+- **Birch**: Tree-based online clustering baseline.
 - **Custom Streaming ("Minesweeper")**: A custom, incremental streaming clustering that dynamically changes cluster boundaries. As each sample comes in, if it's near an existing cluster, it's absorbed and the cluster may expand. If it is far, it creates a new cluster and acts to limit the boundaries of the others.
 - **Improved Rule Envelope Clusterer**: A multi-dimensional streaming algorithm that builds hyperbox bounds for features. It dynamically adjusts `feature_proximity` using stream variance.
 
@@ -30,3 +33,4 @@ We evaluate the performance using three distinct metrics:
 3. Open the generated HTML reports (e.g., `report_01_physics_baseline.html`) to back-track and listen to the grouped clusters!
 4. Run `python 04_supervised_learning.py` to see supervised upper bounds for the extracted features.
 5. Run `python 05_rule_envelope.py` to run the improved Rule Envelope streaming clusterer.
+6. Run `python 06_benchmark_all.py` to execute all algorithms at once and compare their metrics side-by-side!
