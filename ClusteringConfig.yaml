@@ -1,5 +1,5 @@
 clustering:
-  max_clusters: 300
+  max_clusters: 20
   feature_proximity:
     dominant_freq: 0.1
     rms_energy: 0.4
@@ -22,6 +22,7 @@ clustering:
   merge_interval: 10
   save_state_interval_sec: 60
   enable_forgetting: false
+  event_threshold_std: 3.0
 
 logging:
   directory: logs

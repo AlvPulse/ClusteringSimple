@@ -22,6 +22,7 @@ class ImprovedRuleEnvelopeClusterer:
         c = cfg["clustering"]
 
         self.max_clusters = c["max_clusters"]
+        self.event_threshold = c.get("event_threshold_std", 3.0)
         self.base_proximity = c["feature_proximity"]
         self.mode = c["mode"]
         self.max_growth = c.get("max_growth_ratio", 2.0)
@@ -82,6 +83,67 @@ class ImprovedRuleEnvelopeClusterer:
         # Fallback to config
         return self.base_proximity.get(feat, 0.1)
 
+    def _detect_and_log_event(self, point, msg_prefix):
+        """
+        Acts as the 'motion detector'. Calculates which features deviated
+        most from the running global mean by Z-score.
+        """
+        deviations = {}
+        for feat, val in point.items():
+            if self.n_samples > 1 and feat in self.running_m2:
+                std = np.sqrt(self.running_m2[feat] / self.n_samples)
+                if std > self.EPS:
+                    z_score = abs(val - self.running_means[feat]) / std
+                    if z_score > self.event_threshold:
+                        deviations[feat] = f"Z={z_score:.2f} (val: {val:.3f}, mean: {self.running_means[feat]:.3f})"
+
+        if deviations:
+            path = os.path.join(self.log_dir, "event_logs.csv")
+            exists = os.path.exists(path)
+            with open(path, "a", newline="") as f:
+                w = csv.writer(f)
+                if not exists:
+                    w.writerow(["time", "event_type", "triggering_features"])
+
+                features_str = " | ".join([f"{k}: {v}" for k,v in deviations.items()])
+                w.writerow([datetime.now(), msg_prefix, features_str])
+
+    def _log_feature_importance(self):
+        """
+        Calculates how meaningful features are by comparing the variance of cluster centroids
+        to the overall running global variance. A higher ratio indicates a feature separates classes well.
+        """
+        if len(self.clusters) < 2 or self.n_samples < 2:
+            return
+
+        importance = {}
+        feats = list(self.clusters[0].keys())
+
+        for feat in feats:
+            # Calculate variance of cluster centroids for this feature
+            centroids = [(c[feat][0] + c[feat][1]) / 2.0 for c in self.clusters]
+            centroid_var = np.var(centroids)
+
+            # Global variance for this feature
+            global_var = self.running_m2[feat] / self.n_samples
+
+            if global_var > self.EPS:
+                # Ratio of centroid variance to global variance
+                importance[feat] = centroid_var / global_var
+            else:
+                importance[feat] = 0.0
+
+        # Sort features alphabetically so column headers never misalign over time
+        sorted_feats = sorted(importance.keys())
+
+        path = os.path.join(self.log_dir, "feature_importance.csv")
+        exists = os.path.exists(path)
+        with open(path, "a", newline="") as f:
+            w = csv.writer(f)
+            if not exists:
+                w.writerow(["time"] + sorted_feats)
+            w.writerow([datetime.now()] + [f"{importance[feat]:.4f}" for feat in sorted_feats])
+
     def partial_fit(self, x, audio_in=None, sample_rate=None, file=None):
         self._update_running_stats(x)
         self.points_processed += 1
@@ -89,11 +151,14 @@ class ImprovedRuleEnvelopeClusterer:
         best_idx = self._find_best_match(x)
 
         if best_idx is None:
+            self._detect_and_log_event(x, "NEW_CLUSTER")
             assigned_id = self._create_cluster(x)
             self.log_cluster(assigned_id)
         else:
             expanded = self._expand_cluster(best_idx, x)
             if expanded:
+                # If it expanded, we check if it triggered an event (motion detector)
+                self._detect_and_log_event(x, f"EXPAND_CLUSTER_{self.cluster_ids[best_idx]}")
                 self.log_cluster(best_idx)
             assigned_id = best_idx
 
@@ -115,6 +180,7 @@ class ImprovedRuleEnvelopeClusterer:
 
         if (datetime.now() - self.last_save_time).total_seconds() >= self.save_state_interval:
             self.save_state()
+            self._log_feature_importance()
             self.last_save_time = datetime.now()
 
         return cluster_id_to_return
@@ -312,11 +378,20 @@ class ImprovedRuleEnvelopeClusterer:
             self.current_log = os.path.join(self.log_dir, f"rule_updates_{self.log_file_idx:03d}.csv")
             with open(self.current_log, "w", newline="") as f:
                 writer = csv.writer(f)
-                writer.writerow(["time", "cluster", "rules"])
+                header = ["time", "cluster_id"]
+                if len(self.clusters) > 0:
+                    feats = list(self.clusters[0].keys())
+                    for feat in feats:
+                        header.extend([f"{feat}_min", f"{feat}_max"])
+                writer.writerow(header)
 
         with open(self.current_log, "a", newline="") as f:
             writer = csv.writer(f)
-            writer.writerow([datetime.now(), self.cluster_ids[idx], str(self.clusters[idx])])
+            row = [datetime.now(), self.cluster_ids[idx]]
+            env = self.clusters[idx]
+            for feat in env:
+                row.extend([f"{env[feat][0]:.4f}", f"{env[feat][1]:.4f}"])
+            writer.writerow(row)
 
         self.log_rows += 1
         if self.log_rows >= self.max_rows:
@@ -326,18 +401,18 @@ class ImprovedRuleEnvelopeClusterer:
         state = os.path.join(self.log_dir, "cluster_state.csv")
         with open(state, "w", newline="") as f:
             writer = csv.writer(f)
-            header = ["cluster", "count"]
+            header = ["cluster_id", "count"]
             if len(self.clusters) > 0:
                 feats = list(self.clusters[0].keys())
                 for x in feats:
-                    header.extend([x+"_min", x+"_max"])
+                    header.extend([f"{x}_min", f"{x}_max"])
             writer.writerow(header)
 
             if len(self.clusters) > 0:
                 for i, c in enumerate(self.clusters):
                     row = [self.cluster_ids[i], self.cluster_counts[i]]
                     for feat in feats:
-                        row.extend(c[feat])
+                        row.extend([f"{c[feat][0]:.4f}", f"{c[feat][1]:.4f}"])
                     writer.writerow(row)
 
     def log_merge_event(self, id_a, id_b):
@@ -361,6 +436,12 @@ class ImprovedRuleEnvelopeClusterer:
     def track_data(self, cluster_id, audio_data, sample_rate):
         cluster_dir = os.path.join(self.track_dir, f"cluster_{cluster_id}")
         os.makedirs(cluster_dir, exist_ok=True)
+
+        # Check storage limits
+        existing = os.listdir(cluster_dir)
+        if len(existing) >= self.keep:
+            return
+
         timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         filename = f"{timestamp}.wav"
         filepath = os.path.join(cluster_dir, filename)
