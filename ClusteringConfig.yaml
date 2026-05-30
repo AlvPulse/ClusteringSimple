@@ -1,0 +1,33 @@
+clustering:
+  max_clusters: 20
+  feature_proximity:
+    dominant_freq: 0.1
+    rms_energy: 0.4
+    low_band_ratio: 0.05
+    mid_band_ratio: 0.05
+    high_band_ratio: 0.05
+    spectral_flatness: 0.2
+    spectral_entropy: 0.3
+    spectral_kurtosis: 0.5
+    spectral_centroid: 0.5
+    temporal_entropy: 0.3
+    zcr_mean: 0.1
+    zcr_std: 0.1
+    harmonic_score: 0.1
+    harmonic_2: 1
+  mode: "controlled"
+  max_growth_ratio: 2.0
+  overlap_merge_ratio: 0.80
+  min_cluster_points: 2
+  merge_interval: 10
+  save_state_interval_sec: 60
+  enable_forgetting: false
+  event_threshold_std: 3.0
+
+logging:
+  directory: logs
+  max_rows_per_file: 500
+
+tracking:
+  directory: tracked_samples
+  files_per_cluster: 1
